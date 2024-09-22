@@ -235,13 +235,13 @@ def seed_torch(seed=999):
 if __name__ == '__main__':
 
     seed_torch()
-    all_data, seq, label = load_data('../../datasets/ST_1.csv')
+    all_data, seq, label = load_data('../../datasets/train/ST.csv')
     onehot_out = onehot_encoding(seq)
 
-    blo_out, label = load_and_encoding("../../feature/BLOSUM62/data_ST.csv", 20)
-    zscale_out, label = load_and_encoding('../../feature/ZScale/data_ST.csv', 5)
-    bin51_out, label = load_and_encoding('../../feature/binary/data_ST_51.csv', 5)
-    bin52_out,label = load_and_encoding('../../feature/binary/data_ST_52.csv', 5)
+    blo_out, label = load_and_encoding("../../feature/BLOSUM62/train/ST.csv", 20)
+    zscale_out, label = load_and_encoding('../../feature/ZScale/train/ST.csv', 5)
+    bin51_out, label = load_and_encoding('../../feature/binary/train/ST.csv', 5)
+    bin52_out,label = load_and_encoding('../../feature/binary/train/ST.csv', 5)
 
     onehot_out = torch.from_numpy(onehot_out)
     blo_out = torch.from_numpy(blo_out)
