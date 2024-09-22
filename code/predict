@@ -1,0 +1,173 @@
+def load_data(filename):
+    """加载数据
+    单条格式：(文本, 标签id)
+    """
+    D = []
+    seq = []
+    labels = []
+    with open(filename, encoding='utf-8') as f:
+        for l in f:
+            text, label = l.strip().split(' ')
+            text = text.replace("'", "")
+            label = label.replace("'", "")
+            label = int(label)
+            D.append((text, label))
+            seq.append(text)
+            labels.append(label)
+    return D, seq, labels
+class myDataset(Dataset):
+    def __init__(self, seq, label):
+        self.protein_seq = seq
+        self.label_list = label
+
+    def __getitem__(self, index):
+        seq = self.protein_seq[index]
+        label = self.label_list[index]
+        return seq, label
+
+    def __len__(self):
+        return len(self.protein_seq)
+
+
+def load_and_encoding(filename, encoding_size):
+    with open(filename, encoding='utf-8') as f_in:
+        lines = f_in.readlines()
+    data = []
+    labels = []
+    for line in lines:
+        nums = [float(num) for num in line.strip().split(',')]
+        data_nums = np.array(nums[1:]).reshape(33, encoding_size)
+        data.append(data_nums)
+        label_nums = nums[0]
+        labels.append(label_nums)
+
+    data = np.array(data)
+    labels = np.array(labels)
+
+    return data, labels
+
+
+def onehot_encoding(seqs):
+    # 确定蛋白质序列的长度，保存到一个变量中
+    seq_length = len(seqs[0])
+    # 初始化一个二维数组，行数为蛋白质序列的长度，列数为编码维度，每个元素都为0
+    one_hot = np.zeros((seq_length, 20))
+    # 遍历每个氨基酸序列，根据其在氨基酸表中的位置，在对应的列上将值设为1
+    aa_table = {'A': 1, 'R': 2, 'N': 3, 'D': 4, 'C': 5, 'Q': 6, 'E': 7, 'G': 8, 'H': 9, 'I': 10,
+                'L': 11, 'K': 12, 'M': 13, 'F': 14, 'P': 15, 'S': 16, 'T': 17, 'W': 18, 'Y': 19, 'V': 20}
+    encoded_sequences = []
+    for seq in seqs:
+        for i, aa in enumerate(seq):
+            one_hot[i, aa_table[aa]-1] = 1
+        encoded_sequences.append(one_hot)
+        one_hot = np.zeros((seq_length, 20))
+    # 将编码后的二维数组保存到一个列表中，依次存储所有蛋白质序列的编码
+    encoded_sequences = np.array(encoded_sequences)
+    return encoded_sequences
+
+def test(model, test_loader, device):
+    model.eval()
+    y_true = []
+    y_pred = []
+    y_score = []
+    with torch.no_grad():
+        for data, target in test_loader:
+            data = data.float().to(device)
+            inputs = data.transpose(dim0=1, dim1=2)  # 128,55,33
+            target = target.float().to(device)
+            output = model(inputs)
+            output = output.squeeze()
+
+            y_true += target.cpu()
+            y_pred += (output > 0.5).cpu()
+            y_score += output.cpu()
+
+
+    y_pred = [float(x) for x in y_pred]
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    sn = tp / (tp + fn)
+    sp = tn / (tn + fp)
+
+    y_pred_np = torch.tensor(y_pred).cpu().numpy()
+    y_true_np = torch.tensor(y_true).cpu().numpy()
+
+    acc = np.count_nonzero(y_pred_np == y_true_np) / len(y_true)
+    mcc = (tp * tn - fp * fn) / ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)) ** 0.5
+    auc = roc_auc_score(y_true, y_score)
+
+    return sn, sp, mcc, acc, auc
+
+def L1Loss(model,beta):  #https://blog.csdn.net/Zzz_zhongqing/article/details/107528717
+    l1_loss = torch.tensor(0.0,requires_grad = True)
+    for name,parma in model.named_parameters():
+        if 'bias' not in name:
+            l1_loss = l1_loss + beta * torch.sum(torch.abs(parma))
+    return l1_loss
+all_data, seq, label = load_data('../../datasets/test/ST.csv')
+onehot_out = onehot_encoding(seq)
+
+blo_out, label = load_and_encoding("../../feature/BLOSUM62/test/data_ST.csv", 20)
+zscale_out, label = load_and_encoding('../../feature/ZScale/test/data_ST.csv', 5)
+bin51_out, label = load_and_encoding('../../feature/binary/test/data_ST_51.csv', 5)
+bin52_out,label = load_and_encoding('../../feature/binary/test/data_ST_52.csv', 5)
+
+onehot_out = torch.from_numpy(onehot_out)
+blo_out = torch.from_numpy(blo_out)
+zscale_out = torch.from_numpy(zscale_out)
+bin51_out = torch.from_numpy(bin51_out)
+bin52_out = torch.from_numpy(bin52_out)
+label = torch.from_numpy(label)
+
+
+data = torch.cat((blo_out,onehot_out,  zscale_out, bin51_out,bin52_out), dim=2)
+
+
+data = np.array(data)
+label = np.array(label)
+
+
+test_dataset = myDataset(data, label)
+
+test_loader = DataLoader(test_dataset, batch_size=128, shuffle=True, drop_last=True)
+
+
+test_dataset = myDataset(data, label)
+
+test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False, drop_last=True)
+
+
+model =  MultiScaleConvNet().to(device)
+# model.load_state_dict(torch.load('../实验/10fold/be170.83056640625.pthst_model_fold_9.pt'))
+model = torch.load(r"E:\myarticle\best_model\model\930.833984375.pth")
+# model.load_state_dict(torch.load(r"E:\myarticle\best_model\890.8461084905660378.pth"))
+
+model.eval()
+y_true = []
+y_pred = []
+y_score = []
+with torch.no_grad():
+for data, target in test_loader:
+    data = data.float().to(device)
+    inputs = data.transpose(dim0=1, dim1=2)  # 128,55,33
+    target = target.float().to(device)
+    output = model(inputs)
+    output = output.squeeze()
+
+    y_true += target.cpu()
+    y_pred += (output > 0.5).cpu()
+    y_score += output.cpu()
+
+y_pred = [float(x) for x in y_pred]
+tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+sn = tp / (tp + fn)
+sp = tn / (tn + fp)
+
+y_pred_np = torch.tensor(y_pred).cpu().numpy()
+y_true_np = torch.tensor(y_true).cpu().numpy()
+
+acc = np.count_nonzero(y_pred_np == y_true_np) / len(y_true)
+mcc = (tp * tn - fp * fn) / ((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn)) ** 0.5
+auc = roc_auc_score(y_true, y_score)
+
+print('sn: {:.4f}% ,sp: {:.4f}% ,mcc: {:.4f}% ,acc: {:.4f}% ,auc: {:.4f}% '
+  .format( 100 * sn, 100 * sp, 100 * mcc, 100 * acc, 100 * auc))
