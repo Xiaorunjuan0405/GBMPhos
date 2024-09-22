@@ -258,14 +258,15 @@ if __name__ == '__main__':
     label = np.array(label)
 
     x_train, x_test, y_train, y_test = train_test_split(data, label, test_size=0.2, random_state=99)
+   train_x, valid_x, train_y, valid_y = train_test_split(x_train, y_train, test_size=0.2, random_state=99)
     # print(x_train.shape)
 
-    # 创建训练集和测试集的数据加载器
-    train_dataset = myDataset(x_train, y_train)
-    test_dataset = myDataset(x_test, y_test)
+
+    train_dataset = myDataset(train_x, train_y)
+    valid_dataset = myDataset(valid_x, valid_y)
 
     train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True, drop_last=True)
-    test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False, drop_last=True)
+    valid_loader = DataLoader(valid_dataset, batch_size=128, shuffle=False, drop_last=True)
 
 
     model = MultiScaleConvNet().to(device)
@@ -294,12 +295,7 @@ if __name__ == '__main__':
             loss.backward()
             optimizer.step()
 
-        sn,sp,mcc,acc,auc = test(model,test_loader,device)
-
-        if acc > 0.85 and acc > best_acc:
-            torch.save(model, '../../best_model/' + str(epoch) + str(acc) + '.pth')
-            # torch.save(model.state_dict(),'../../best_model1/BiGRU_model_weights.pt')
-            best_acc = acc
-            print('Saved model with accuracy {:.4f}%'.format(100 * best_acc))
+        sn,sp,mcc,acc,auc = test(model,valid_loader,device)
         print('epoch {} ,sn: {:.4f}% ,sp: {:.4f}% ,mcc: {:.4f}% ,acc: {:.4f}% ,auc: {:.4f}% '
               .format(epoch,100*sn,100*sp,100*mcc,100*acc,100*auc))
+
