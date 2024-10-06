@@ -274,7 +274,7 @@ if __name__ == '__main__':
     criterion = nn.BCELoss()
 
 
-    # 训练和测试模型
+    # 训练和验证模型
     for epoch in range(100):
         best_acc=0
         model.train()
